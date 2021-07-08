@@ -1,0 +1,4 @@
+some_other_file.pdf
+some_file.png
+.*
+!.*/

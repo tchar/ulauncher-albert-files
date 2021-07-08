@@ -1,0 +1,78 @@
+{
+    "required_api_version": "^2.0.0",
+    "name": "Files",
+    "description": "An extension to find files, using built in cache",
+    "developer_name": "Tilemachos Charalampous",
+    "icon": "images/icon.svg",
+    "options": {
+      "query_debounce": 0.005
+    },
+    "preferences": [
+      {
+        "id": "files_kw",
+        "type": "keyword",
+        "name": "Find Files",
+        "description": "Find files",
+        "default_value": "?"
+      },
+      {
+          "id": "directories",
+          "type": "text",
+          "name": "Directories to scan, as well as depth",
+          "description": "In the format of /home/user=2, where 2 means depth. 0 depth or no depth ignores the depth",
+          "default_value": "~/"
+      },
+      {
+        "id": "ignore_filename",
+        "type": "input",
+        "name": "Name of ignore file",
+        "description": "The filename to use as ignore",
+        "default_value": ".ulauncherignore"
+      },
+      {
+        "id": "scan_every_minutes",
+        "type": "input",
+        "name": "Scan interval in minutes",
+        "default_value": "15"
+      },
+      {
+        "id": "search_after_characters",
+        "type": "input",
+        "name": "Characters to start searching after",
+        "default_value": "2"
+      },
+      {
+        "id": "search_max_results",
+        "type": "input",
+        "name": "Maximum Search Results",
+        "description": "Maximum Search Results returned, set to 0 for all results",
+        "default_value": "5"
+      },
+      {
+        "id": "search_threshold",
+        "type": "input",
+        "name": "Threshold to limit searches",
+        "description": "A value between 0 and 1",
+        "default_value": "0.5"
+      },
+      {
+        "id": "icon_theme",
+        "type": "input",
+        "name": "Name or Path of icon theme",
+        "description": "Name or absolute path of your icon theme",
+        "default_value": "square-o"
+      },
+      {
+        "id": "use_built_in_folder_theme",
+        "type": "select",
+        "name": "Use built in folder theme",
+        "description": "Use built in folder theme instead of system theme",
+        "default_value": "False",
+        "options": [
+          {"value": "False", "text": "No"},
+          {"value": "True", "text": "Yes"}
+        ]
+      }
+    ]
+  }
+  
