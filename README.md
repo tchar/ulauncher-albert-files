@@ -1,6 +1,6 @@
 # <img src="images/icon.svg" alt="drawing" width="25"/> Ulauncher/Albert File Search Extension
 
-File and Directory search using Cache, **`gitignore`** style and Unix style matching (wildcards).
+File and Directory search using Cache, **`gitignore`** style to ignore files and directories and Unix style matching (wildcards).
 
 ## Albert Demo
 
