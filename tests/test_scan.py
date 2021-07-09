@@ -8,7 +8,7 @@ def test_scan():
 
     assert join(SCAN_DIRECTORY, 'root_file.mp3') in Cache()
     assert join(SCAN_DIRECTORY, '.albertignore2') in Cache()
-    assert join(SCAN_DIRECTORY, '.customignore') in Cache()
+    assert join(SCAN_DIRECTORY, '.ulauncherignore') in Cache()
     assert join(SCAN_DIRECTORY, 'Downloads') in Cache()
     assert join(SCAN_DIRECTORY, 'Projects') in Cache()
 
@@ -30,16 +30,16 @@ def test_scan():
     assert join(SCAN_DIRECTORY, '.hidden_directory', 'file_in_hidden_directory') not in Cache()
 
 def test_scan_custom_ignore():
-    set_cache_settings('.customignore', 2, 0.5, PATHS, DEPTHS)
+    set_cache_settings('.ulauncherignore', 2, 0.5, PATHS, DEPTHS)
     Cache().scan()
 
     assert join(SCAN_DIRECTORY, 'root_file.mp3') in Cache()
     assert join(SCAN_DIRECTORY, '.albertignore2') not in Cache()
-    assert join(SCAN_DIRECTORY, '.customignore') not in Cache()
+    assert join(SCAN_DIRECTORY, '.ulauncherignore') not in Cache()
 
     assert join(SCAN_DIRECTORY, 'Downloads') in Cache()
     assert join(SCAN_DIRECTORY, 'Downloads', '.albertignore2') not in Cache()
-    assert join(SCAN_DIRECTORY, 'Downloads', '.customignore') not in Cache()
+    assert join(SCAN_DIRECTORY, 'Downloads', '.ulauncherignore') not in Cache()
     assert join(SCAN_DIRECTORY, 'Downloads', 'some_file.png') in Cache()
     assert join(SCAN_DIRECTORY, 'Downloads', 'some_other_file.pdf') not in Cache()
     
