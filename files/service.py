@@ -1,3 +1,4 @@
+from files.cache.search_results import SearchResults
 import os
 from time import time
 from configparser import ConfigParser, MissingSectionHeaderError
@@ -13,15 +14,18 @@ class FilesService(metaclass=Singleton):
         self._scan_every_minutes = 15
         self._lock = RLock()
         self._running = False
+        self._thread_id = 0
         self._logger = logging.getLogger(__name__)
 
     @lock
-    def _run_thread(self):
+    def _run_thread(self, thread_id):
+        if self._thread_id != thread_id:
+            return
         if self._scan_every_minutes <= 0 or not self._running:
             self._running = False
             return
         Cache().scan()
-        thread = Timer(self._scan_every_minutes * 60.0, self._run_thread)
+        thread = Timer(self._scan_every_minutes * 60.0, self._run_thread, args=(thread_id,))
         thread.setDaemon(True)
         thread.start()
 
@@ -30,11 +34,12 @@ class FilesService(metaclass=Singleton):
         return Cache().search(search_value)
 
     @lock
-    def run(self):
-        if self._running:
+    def run(self, force=False):
+        if self._running and not force:
             return
         self._running = True
-        thread = Timer(0.0, self._run_thread)
+        self._thread_id += 1
+        thread = Timer(0.0, self._run_thread, args=(self._thread_id,))
         thread.setDaemon(True)
         thread.run()
 
@@ -46,7 +51,10 @@ class FilesService(metaclass=Singleton):
     def set_scan_every_minutes(self, scan_every_minutes, _set=True):
         scan_every_minutes = type_or_default(scan_every_minutes, float, 15)
         if _set:
+            self._logger.info('Updating SCAN_EVERY_MINUTES to {}'.format(scan_every_minutes))
             self._scan_every_minutes = scan_every_minutes
+            SearchResults.KEEP_FOR = scan_every_minutes * 60
+            self.run(force=True)
         return scan_every_minutes
 
     @lock
@@ -69,13 +77,16 @@ class FilesService(metaclass=Singleton):
             depth = type_or_default(depth, int, 0)
             depths.append(depth)
         if _set:
+            self._logger.info('Updating DIRECTORIES to {}'.format(directories))
             Cache().set_paths(paths, depths)
+            self.run(force=True)
         return paths, depths
 
     @lock
     def set_search_after_characters(self, search_after_characters, _set=True):
         search_after_characters = type_or_default(search_after_characters, int, 2)
         if _set:
+            self._logger.info('Updating SEARCH_AFTER_CHARACTERS to {}'.format(search_after_characters))
             Cache().set_search_after_characters(search_after_characters)
         return search_after_characters
         
@@ -83,6 +94,7 @@ class FilesService(metaclass=Singleton):
     def set_search_max_results(self, search_max_results, _set=True):
         search_max_results = type_or_default(search_max_results, int, 5)
         if _set:
+            self._logger.info('Updating SEARCH_MAX_RESULTS to {}'.format(search_max_results))
             Cache().set_search_max_results(search_max_results)
         return search_max_results
         
@@ -91,6 +103,7 @@ class FilesService(metaclass=Singleton):
     def set_search_threshold(self, search_threshold, _set=True):
         search_threshold = type_or_default(search_threshold, int, 0.5)
         if _set:
+            self._logger.info('Updating SEARCH_THRESHOLD to {}'.format(search_threshold))
             Cache().set_search_threshold(search_threshold)
         return search_threshold
 
@@ -102,27 +115,28 @@ class FilesService(metaclass=Singleton):
 
         ignore_filename = ignore_filename.strip() or fallback
         if _set:
+            self._logger.info('Updating IGNORE_FILENAME to {}'.format(ignore_filename))
             Cache().set_ignore_filename(ignore_filename)
+            self.run(force=True)
         return ignore_filename
 
-    
     @lock
     def set_icon_theme(self, icon_theme, _set=True):
         icon_theme = icon_theme.strip() or 'square-o'
         if _set:
+            self._logger.info('Updating ICON_THEME to {}'.format(icon_theme))
             IconRegistry().set_icon_pack(icon_theme)
         return icon_theme
 
     @lock
     def set_use_built_in_folder_theme(self, use_built_in_folder_theme, _set=True):
-        print(use_built_in_folder_theme)
         use_built_in_folder_theme = use_built_in_folder_theme.strip() or 'false'
         use_built_in_folder_theme = use_built_in_folder_theme.lower() == 'true'
         if _set:
+            self._logger.info('Updating USE_BUILT_IN_FOLDER_THEME to {}'.format(use_built_in_folder_theme))
             IconRegistry().set_use_built_in_folder_theme(use_built_in_folder_theme)
         return use_built_in_folder_theme
         
-
     @lock
     def load_settings_ulauncher(self, scan_every_minutes, directories,
                                 search_after_characters, search_max_results,
@@ -156,6 +170,8 @@ class FilesService(metaclass=Singleton):
                 search_threshold, ignore_filename, icon_theme, use_built_in_folder_theme, paths
             )
         )
+
+        SearchResults.KEEP_FOR = scan_every_minutes * 60
         Cache().set_search_after_characters(search_after_characters)
         Cache().set_search_max_results(search_max_results)
         Cache().set_search_threshold(search_threshold)
@@ -163,7 +179,7 @@ class FilesService(metaclass=Singleton):
         Cache().set_paths(paths, depths)
         IconRegistry().set_icon_pack(icon_theme)
         IconRegistry().set_use_built_in_folder_theme(use_built_in_folder_theme)
-        
+
     @lock
     def load_settings_albert(self, file_path):
         self._logger.info('Loading settings')
@@ -228,6 +244,8 @@ class FilesService(metaclass=Singleton):
                 search_threshold, ignore_filename, icon_theme, use_built_in_folder_theme, paths
             )
         )
+
+        SearchResults.KEEP_FOR = scan_every_minutes * 60
         Cache().set_search_after_characters(search_after_characters)
         Cache().set_search_max_results(search_max_results)
         Cache().set_search_threshold(search_threshold)

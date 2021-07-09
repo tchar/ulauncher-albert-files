@@ -5,43 +5,24 @@ from ..result import Result
 class CacheEntry(UserString):
         def __init__(self, path, root_entry, is_directory=False):
             super().__init__(path)
+            self.name = os.path.basename(path)
             self.path = path
+            self.basename, self.ext = os.path.splitext(self.name)
+            self.path_len = path.count(os.sep)
+
+            if root_entry is None: relpath = ''
+            else: relpath = os.path.relpath(path, root_entry.path)
+            self.relpath = relpath
+            self.relpath_basename, _ = os.path.splitext(self.relpath)
+            self.relpath_len = relpath.count(os.sep)
+            
             self.root_entry = root_entry
             self.is_directory = is_directory
-            self._path_len = None
 
-        @property
-        def path_len(self):
-            if self._path_len is None:
-                self._path_len = self.path.count(os.sep)
-            return self._path_len
-
-        @property
-        def relative_path_len(self):
-            if self.root_entry is None:
-                return 0
-            return self.path_len - self.root_entry.path_len
+            self.name_lower = self.name.lower()
+            self.basename_lower = self.basename.lower()
+            self.relpath_lower = self.relpath.lower()
+            self.relpath_basename_lower = self.relpath_basename.lower()
 
         def to_result(self, score=None):
             return Result(self.path, self.is_directory, score)
-
-        # def __len__(self):
-        #     return len(self.path)
-
-        # def __hash__(self):
-        #     return hash(self.path)
-
-        # def __eq__(self, other):
-        #     return isinstance(other, CacheEntry) and self.path == other.path
-
-        # def __lt__(self, other):
-        #     return isinstance(other, CacheEntry) and self.path < other.path
-
-        # def __gt__(self, other):
-        #     return not (self < other)
-
-        # def __ge__(self, other):
-        #     return isinstance(other, CacheEntry) and self.path <= other.path
-
-        # def __le__(self, other):
-        #     return isinstance(other, CacheEntry) and self.path >= other.path

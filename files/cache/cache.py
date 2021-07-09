@@ -1,17 +1,19 @@
 import os
-import re
+from queue import Queue
+from re import search
 from time import time
 import math
 import itertools
 from threading import RLock
+from .search_results import SearchResults
 from .entry import CacheEntry
 from .. import logging
 from ..match import Ignore, Match
-from ..result import Result
 from ..utils import Singleton, lock
 
+
 class Cache(metaclass=Singleton):
-    SEARCH_TERM_REGEX = re.compile(r'([_\-])', flags=re.IGNORECASE)
+    # SEARCH_TERM_REGEX = re.compile(r'([_\-])', flags=re.IGNORECASE)
     COMMON_EXTS = set([
         'txt', 'torrent', 'mp4', 'm3u', 'm4a', '3g2', '3gp', 'avi',
         'mpg', 'srt', 'gif', 'mp3', 'png', 'iso', 'py', 'js', 'zipx',
@@ -26,12 +28,13 @@ class Cache(metaclass=Singleton):
         self._search_threshold = 0.5
         self._root_paths = ()
         self._depths = ()
-        self._data = {}
+        self._entries = {}
         self._common_prefix = ''
         self._shortest_path = 0
         self._longest_path = 1
         self._lock = RLock()
         self._logger = logging.getLogger(__name__)
+        self._search_results = SearchResults()
 
     @lock
     def set_search_after_characters(self, search_after_characters):
@@ -101,32 +104,23 @@ class Cache(metaclass=Singleton):
         
         directories_num = 0
         files_num = 0
-        path_dict = {}
-        data = {}
+        paths_dict = {}
         root_matcher = Ignore.get_root_matcher()
         matchers = {}
 
         for root_path, depth in zip(self._root_paths, self._depths):
-            if root_path in data:
+            if root_path in paths_dict:
                 continue
             if not os.path.exists(root_path):
                 continue
             if os.path.isfile(root_path):
-                search_name, search_name_no_ext, ext = Cache._get_search_names(root_path)
                 entry = CacheEntry(root_path, None)
-                if search_name not in data:
-                    data[search_name] = []
-                data[search_name].append(entry)
-                path_dict[root_path] = entry
+                paths_dict[root_path] = entry
                 files_num += 1
-                if ext:
-                    if search_name_no_ext not in data:
-                        data[search_name_no_ext] = []
-                    data[search_name_no_ext].append(entry)
                 continue
             
             for root_dir, _, file_names in Cache._walklevel(root_path, depth):
-                if root_dir in data:
+                if root_dir in paths_dict:
                     continue
 
                 # Get matcher to ignore or not
@@ -141,105 +135,108 @@ class Cache(metaclass=Singleton):
 
                 directories_num += 1
 
-                root_dir_parent_entry = path_dict.get(root_path)
+                root_dir_parent_entry = paths_dict.get(root_path)
                 if root_dir_parent_entry is None:
                     root_dir_parent_entry = CacheEntry(root_path, None, is_directory=True)
                     root_dir_entry = root_dir_parent_entry
                 else:
                     root_dir_entry = CacheEntry(root_dir, root_dir_parent_entry, is_directory=True)
 
-                search_name, _, _ = Cache._get_search_names(root_dir)
-                if search_name not in data:
-                    data[search_name] = []
-                data[search_name].append(root_dir_entry)
-                path_dict[root_dir] = root_dir_entry
+                paths_dict[root_dir] = root_dir_entry
 
                 for file_name in file_names:
                     file_path = os.path.join(root_dir, file_name)
-                    if file_path in path_dict:
+                    if file_path in paths_dict:
                         continue
                     file_relpath = os.path.join(root_dir_relpath, file_name)
                     if not matcher(file_relpath):
                         continue
 
                     files_num += 1
-                    path_dict[file_path] = root_dir_parent_entry
-                    entry = CacheEntry(file_path, root_dir_entry)
-                    search_name, search_name_no_ext, ext = Cache._get_search_names(file_path)
-                    if search_name not in data:
-                        data[search_name] = []
-                    data[search_name].append(entry)
-                    if not ext or ext.lower() not in Cache.COMMON_EXTS:
-                        continue
-                    if search_name_no_ext not in data:
-                        data[search_name_no_ext] = []
-                    data[search_name_no_ext].append(entry)
+                    entry = CacheEntry(file_path, paths_dict[root_path])
+                    paths_dict[file_path] = entry
 
-        if data:
-            common_prefix = os.path.commonprefix(list(path_dict.keys()))
-
-            path_lengths = map(lambda s: s.count(os.sep), path_dict.keys())
-            path_lengths = list(path_lengths)
-
-            shortest_path = min(path_lengths)
-            longest_path = max(path_lengths)
-        else:
-            common_prefix = 0
-            shortest_path = 0
-            longest_path = 1
-
-        with self._lock:
-            self._common_prefix = common_prefix
-            self._shortest_path = shortest_path
-            self._longest_path = longest_path
-            self._data = data
+        self._search_results.clear()
+        self._entries = set(paths_dict.values())
         self._logger.info('Finished scanning in {:.2f}ms found {} directories and {} files'.format(1000 * (time() - now), files_num, directories_num))
 
-    def _get_score(self, search_value, query):
+    def _get_score(self, entry_attr, query, relpath=False):
         try:
-            search_index = search_value.index(query)
-            score = len(query) / len(search_value)
-            score_index = (len(query) - search_index) / len(query)
+            index = entry_attr.index(query)
+            if relpath:
+                entry_end = entry_attr[index + len(query):]
+                if '/' in entry_end: return 0
+
+            score = len(query) / len(entry_attr)
+            score_index = (len(query) - index) / len(query)
             return score + score_index
         except ValueError:
             return 0
 
     def _get_path_score(self, entry):
-        return 1.36787944117 - math.exp(-1 + entry.relative_path_len / 6)
+        return 1.36787944117 - math.exp(-1 + entry.relpath_len / 6)
 
     @lock
     def search(self, query):
         query = query.strip()
+        original_query = query
         if not self._search_after_characters <= 0 and len(query) <= self._search_after_characters:
             return []
 
+        prev_results = self._search_results.get_results(original_query)
+        if prev_results is not None:
+            self._logger.info('Returning previous results')
+            return prev_results
+
+        prev_entries = self._search_results.get_entries(original_query)
+        if prev_entries is not None:
+            self._logger.info('Searching from previous entries')
+            entries_to_search = prev_entries
+        else:
+            entries_to_search = self._entries
+
+        # Search previous results
+        query = query.lower()
+        query, query_ext = os.path.splitext(query)
+        if query_ext:
+            query = query + query_ext
+        if query.endswith('/'):
+            query = query[:-1]
+
         matcher = Match(query)
-        query, search_value_no_ext, search_value_ext = Cache._get_search_names(query, base_name=False)
-        # matches = difflib.get_close_matches(query, values, n=5, cutoff=0.6)
 
         result_scores = {}
-        for search_value in self._data:
-            score = matcher(search_value) and 2.0
+        for entry in entries_to_search:
+            score = (
+                # (matcher(entry.relpath) and 2.0) or
+                (matcher(entry.relpath, ignorecase=True) and 2.0) or
+                # (matcher(entry.name) and 1.9) or 
+                (matcher(entry.name, ignorecase=True) and 1.95)
+            )
 
             if not score:
-                score = matcher(search_value, ignorecase=True) and 1.9
+                if query_ext:
+                    relpath = entry.relpath_lower
+                    name = entry.name_lower
+                else:
+                    relpath = entry.relpath_basename_lower
+                    name = entry.basename_lower
+                
+                score = (
+                    self._get_score(relpath, query, relpath=True),
+                    self._get_score(name, query, relpath=False)
+                )
+                score = max(score)
+
+            if not score:
+                continue
             
-            if not score:
-                score = self._get_score(search_value, query)
-                if search_value_ext:
-                    score = max(score, self._get_score(search_value, search_value_no_ext))
-                if score == 0:
-                    continue
+            final_score = (score + self._get_path_score(entry)) / 3
+            result_scores[entry] = final_score
 
-            for entry in self._data[search_value]:
-                final_score = (score + self._get_path_score(entry)) / 3
-                if entry in result_scores:
-                    old_score = result_scores[entry]
-                    if final_score <= old_score:
-                        continue
-                result_scores[entry] = final_score
+        self._search_results.add_entries(original_query, list(result_scores.keys()))
 
-        result_scores = sorted(result_scores.items(), key=lambda item: (item[1], 1 / len(item[0])), reverse=True)
+        result_scores = sorted(result_scores.items(), key=lambda item: (item[1], 1 / (item[0].relpath_len + 1)), reverse=True)
         results = []
         i = 0
         for entry, score in result_scores:
@@ -250,4 +247,5 @@ class Cache(metaclass=Singleton):
             results.append(result)
             i += 1
 
+        self._search_results.add_results(original_query, results)
         return results
