@@ -37,6 +37,6 @@ class AlbertLogger:
         self._log(critical, message, *args)
     
 def getLogger(name):
-    if Launcher.get() == 'albert':
+    if Launcher.get() == Launcher.ALBERT:
         return AlbertLogger(name)
     return logging.getLogger(name)

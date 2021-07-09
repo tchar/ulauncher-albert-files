@@ -3,12 +3,11 @@ import re
 from .launcher import Launcher
 from .utils import Singleton
 
-if Launcher.get() == 'albert':
-    try:
-        from albert import iconLookup as iconLookup
-    except ImportError:
-        iconLookup = lambda _: None
-else:
+iconLookup = lambda _: None
+if Launcher.get() == Launcher.ALBERT:
+    try: from albert import iconLookup as iconLookup
+    except ImportError: pass
+elif Launcher.get() == Launcher.ULAUNCHER:
     try:
         from gi.repository import Gtk
         icon_theme = Gtk.IconTheme.get_default()
@@ -17,9 +16,7 @@ else:
             if icon:
                 return icon.get_filename()
             return None
-    except ImportError:
-        iconLookup = lambda _: None
-
+    except ImportError: pass
 
 class IconRegistry(metaclass=Singleton):
     ICON_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))

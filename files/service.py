@@ -96,7 +96,10 @@ class FilesService(metaclass=Singleton):
 
     @lock
     def set_ignore_filename(self, ignore_filename, _set=True):
-        fallback = '.ulauncherignore' if Launcher.get() == 'ulauncher' else '.albertignore2'
+        fallback = None
+        if Launcher.get() == Launcher.ALBERT: fallback = '.albertignore2'
+        elif Launcher.get() == Launcher.ULAUNCHER: fallback = '.ulauncherignore'
+
         ignore_filename = ignore_filename.strip() or fallback
         if _set:
             Cache().set_ignore_filename(ignore_filename)
